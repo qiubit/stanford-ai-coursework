@@ -83,6 +83,16 @@ class NMT(nn.Module):
         ###     Conv1D Layer:
         ###         https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
 
+        self.post_embed_cnn = nn.Conv1d(embed_size, embed_size, 2, padding='same')
+        self.encoder = nn.LSTM(embed_size, hidden_size, bidirectional=True, bias=True)
+        self.decoder = nn.LSTMCell(embed_size + hidden_size, hidden_size, bias=True)
+        self.h_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
+        self.c_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
+        self.att_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
+        self.combined_output_projection = nn.Linear(3*hidden_size, hidden_size, bias=False)
+        self.target_vocab_projection = nn.Linear(hidden_size, len(vocab.tgt), bias=False)
+        self.dropout = nn.Dropout(p=dropout_rate)
+
         ### END YOUR CODE
 
     def forward(self, source: List[List[str]], target: List[List[str]]) -> torch.Tensor:
@@ -179,6 +189,18 @@ class NMT(nn.Module):
         ###     Tensor Reshape (a possible alternative to permute):
         ###         https://pytorch.org/docs/stable/generated/torch.Tensor.reshape.html
 
+        X = self.model_embeddings.source(source_padded)
+        X = X.permute(1, 2, 0)
+        X = self.post_embed_cnn(X)
+        X = X.permute(2, 0, 1)
+        X_packed = nn.utils.rnn.pack_padded_sequence(X, source_lengths)
+        outputs_packed, (h_n, c_n) = self.encoder(X_packed)
+        outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs_packed)
+        outputs = outputs.permute(1, 0, 2)
+        h_n = torch.cat([h_n[0], h_n[1]], dim=1)
+        c_n = torch.cat([c_n[0], c_n[1]], dim=1)
+        enc_hiddens = outputs
+        dec_init_state = (self.h_projection(h_n), self.c_projection(c_n))
 
         ### END YOUR CODE
 
