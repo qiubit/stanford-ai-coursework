@@ -63,7 +63,6 @@ class BCAgent(BaseAgent):
         """
         :param batch_size: size of batch to sample from replay buffer
         """
-        # HW1: you will modify this
         return self.replay_buffer.sample_random_data(batch_size)
 
     def save(self, path):

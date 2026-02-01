@@ -104,8 +104,8 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         else:
             observation = obs[None]
 
-        # TODO return the action that the policy prescribes
-        raise NotImplementedError
+        with torch.no_grad():
+            return ptu.to_numpy(self.mean_net(ptu.from_numpy(observation)))
 
     def forward(self, observation: torch.FloatTensor) -> Any:
         """
@@ -115,13 +115,7 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         :return:
             action: sampled action(s) from the policy
         """
-        # TODO: implement the forward pass of the network.
-        # You can return anything you want, but you should be able to differentiate
-        # through it. For example, you can return a torch.FloatTensor. You can also
-        # return more flexible objects, such as a
-        # `torch.distributions.Distribution` object. It's up to you!
-        
-        raise NotImplementedError
+        return self.mean_net(observation)
 
     def update(self, observations, actions):
         """
@@ -132,9 +126,11 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         :return:
             dict: 'Training Loss': supervised learning loss
         """
-        # TODO: update the policy and return the loss. Recall that to update the policy
-        # you need to backpropagate the gradient and step the optimizer.
-        loss = TODO
+        self.optimizer.zero_grad()
+        policy_actions = self.mean_net(ptu.from_numpy(observations))
+        loss = ((policy_actions - ptu.from_numpy(actions)) ** 2).mean()
+        loss.backward()
+        self.optimizer.step()
 
         return {
             'Training Loss': ptu.to_numpy(loss),

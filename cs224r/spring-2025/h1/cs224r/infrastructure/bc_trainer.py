@@ -150,20 +150,18 @@ class BCTrainer:
                 itr,
                 initial_expertdata,
                 collect_policy
-            )  # HW1: implement this function below
+            )
             paths, envsteps_this_batch, train_video_paths = training_returns
             self.total_envsteps += envsteps_this_batch
 
             # Relabel the collected observations with actions from a provided expert policy
             if relabel_with_expert and itr>=start_relabel_with_expert:
-                # HW1: implement this function below
                 paths = self.do_relabel_with_expert(expert_policy, paths)
 
             # Add collected data to replay buffer
             self.agent.add_to_replay_buffer(paths)
 
             # Train agent (using sampled data from replay buffer)
-            # HW1: implement this function below
             training_logs = self.train_agent()
 
             # Log and save videos and metrics
@@ -197,22 +195,27 @@ class BCTrainer:
             train_video_paths: paths which also contain videos for visualization purposes
         """
 
-        # TODO decide whether to load training data or use the current policy to collect more data
-        # HINT1: On the first iteration, do you need to collect training trajectories? You might
-        # want to handle loading from expert data, and if the data doesn't exist, collect an appropriate
-        # number of transitions.
-        # HINT2: Loading from expert transitions can be done using pickle.load()
-        # HINT3: To collect data, you might want to use pre-existing sample_trajectories code from utils
-        # HINT4: You want each of these collected rollouts to be of length self.params['ep_len']
-
         print("\nCollecting data to be used for training...")
-        paths, envsteps_this_batch = TODO
+        paths = []
+        envsteps_this_batch = 0
+        if itr == 0:
+            with open(load_initial_expertdata, 'rb') as f:
+                data = pickle.loads(f.read())
+            for p in data:
+                paths.append(
+                    utils.Path(
+                        p['observation'], p['image_obs'], p['action'], p['reward'], p['next_observation'], p['terminal'])
+                )
+                envsteps_this_batch += len(p['reward'])
+
+        if envsteps_this_batch == 0:
+            paths, envsteps_this_batch = utils.sample_trajectories(self.env,
+                collect_policy, self.params['batch_size'], self.params['ep_len'], False)
 
         # collect more rollouts with the same policy, to be saved as videos in tensorboard
         # note: here, we collect MAX_NVIDEO rollouts, each of length MAX_VIDEO_LEN
         train_video_paths = None
         if self.log_video:            
-            ## TODO look in utils and implement sample_n_trajectories
             print('\nCollecting train rollouts to be used for saving videos...')
             train_video_paths = utils.sample_n_trajectories(self.env,
                 collect_policy, MAX_NVIDEO, MAX_VIDEO_LEN, True)
@@ -226,16 +229,8 @@ class BCTrainer:
         print('\nTraining agent using sampled data from replay buffer...')
         all_logs = []
         for train_step in range(self.params['num_agent_train_steps_per_iter']):
-
-            # TODO sample some data from the data buffer
-            # HINT1: use the agent's sample function
-            # HINT2: how much data = self.params['train_batch_size']
-            ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = TODO
-
-            # TODO use the sampled data to train an agent
-            # HINT: use the agent's train function
-            # HINT: keep the agent's training log for debugging
-            train_log = TODO
+            ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.agent.sample(self.params['train_batch_size'])
+            train_log = self.agent.train(ob_batch, ac_batch)
             all_logs.append(train_log)
         return all_logs
 
@@ -249,11 +244,11 @@ class BCTrainer:
         expert_policy.to(ptu.device)
         print("\nRelabelling collected observations with labels from an expert policy...")
 
-        # TODO relabel collected obsevations (from our policy) with labels from an expert policy
-        # HINT: query the policy (using the get_action function) with paths[i]["observation"]
-        # and replace paths[i]["action"] with these expert labels
+        for i, _ in enumerate(paths):
+            paths[i]['action'] = expert_policy.get_action(paths[i]['observation'])
 
-        raise NotImplementedError
+        return paths
+
 
     ####################################
     ####################################
